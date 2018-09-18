@@ -1,6 +1,7 @@
 from __future__ import print_function
 import os
 import numpy as np
+import math
 import tensorflow as tf
 import random
 from collections import deque
@@ -117,9 +118,22 @@ def getReward(s):
   else:
     print("Error: Unknown GameState", s)
   return reward
- 
 
-
+def distance(a, b):
+  c = [0,0]
+  c[0] = a[0] - b[0]
+  c[1] = a[1] - b[1]
+  return math.hypot(c[0], c[1])
+def getReward2(last_state, state, status, has_kicked):
+  reward = 0
+  if status == hfo.GOAL:
+    reward = reward + 5
+  if int(state[5]) == 1 and has_kicked == False:
+    reward = reward + 1
+  reward = reward + distance([last_state[0], last_state[1]], [last_state[3], last_state[4]]) - distance([state[0], state[1]], [state[3], state[4]])
+  reward = reward + 3 * distance([last_state[3], last_state[4]], [1,0])
+  reward = reward - 3 * distance([state[3], state[4]], [1,0])#[1,0] is the goal position
+  return reward
 def main():
   hfo_env = hfo.HFOEnvironment()
   hfo_env.connectToServer(hfo.HIGH_LEVEL_FEATURE_SET)
@@ -128,14 +142,16 @@ def main():
     status = hfo.IN_GAME
     count = 0
     action = np.zeros(10, dtype=float)
-    
+    has_kicked = False
     print("episode begin")
     while status == hfo.IN_GAME:
       count = count + 1
-      last_state = state
       state = hfo_env.getState()
+      if int(state[5]) == 1:
+        has_kicked = True
       if bool(action[0]) or bool(action[1]) or bool(action[2]) or bool(action[3]) == True:
-        reward = getReward(status)
+        reward = getReward2(last_state, state, status, has_kicked)
+        print(reward)
         # print(count, action)
       action = agent.egreedy_action(state)
       # print(action)
@@ -149,9 +165,12 @@ def main():
         hfo_env.act(hfo.TACKLE, action[7])
         print("tackle")
       elif int(action[3]) == 1:
-        hfo_env.act(hfo.KICK, action[8], action[9])
+        # hfo_env.act(hfo.KICK, action[8], action[9])
+        hfo_env.act(hfo.SHOOT)
         print("kick")
       status=hfo_env.step()
+      last_state = state
+      
     
     # Quit if the server goes down
     if status == hfo.SERVER_DOWN:
