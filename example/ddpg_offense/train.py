@@ -146,11 +146,13 @@ def main():
     print("episode begin")
     while status == hfo.IN_GAME:
       count = count + 1
+      print("count" + str(count))
       state = hfo_env.getState()
       if int(state[5]) == 1:
         has_kicked = True
       if bool(action[0]) or bool(action[1]) or bool(action[2]) or bool(action[3]) == True:
         reward = getReward2(last_state, state, status, has_kicked)
+        print("reward")
         print(reward)
         # print(count, action)
       action = agent.egreedy_action(state)
