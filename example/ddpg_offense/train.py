@@ -73,39 +73,25 @@ class DQN():
 
 
     td_error = tf.losses.mean_squared_error(labels=q_target, predictions=q)
-
-
-  # def create_Q_network(self):
-  #   W1 = self.weight_variable([self.state_dim, 20])
-  #   b1 = self.bias_variable([20])
-  #   W2 = self.weight_variable([20,self.action_dim])
-  #   b2 = self.bias_variable([self.action_dim])
-
-  #   self.state_input = tf.placeholder("float32", [None, self.state_dim])
-
-  #   h_layer = tf.nn.relu(tf.matmul(self.state_input, W1) + b1)
-
-  #   self.Q_value = tf.matmul(h_layer, W2) + b2
   
-  # def weight_variable(self, shape):
-  #   initial = tf.truncated_normal(shape)
-  #   return tf.Variable(initial)
 
-  # def bias_variable(self, shape):
-  #   initial = tf.constant(0.01, shape = shape)
-  #   return tf.Variable(initial)
+ 
 
-  # def create_training_method(self):
-  #   pass
+  def choose_action(self, state):
+    return self.sess.run(self.action, {self.state: state[np.newaxis, :]})[0]
 
 
-  # def perceive(self,state, action, reward, next_state, done):
-  #   one_hot_action = np.zeros(self.action_dim)
-  #   one_hot_action[action] = 1
 
-  # def train_Q_network(self):
-  #   pass
 
+  def _build_a(self, state, scope, trainable):
+    with tf.variable_scope(scope):
+      net = tf.layers.dense(state, 30, activation=tf.nnrelu, name='l1')
+
+
+  def _build_c(self, state, action, scope, trainable):
+    with tf.variable_scope(scope):
+      n_l1 = 
+  
   def egreedy_action(self, state):
     action = np.zeros(10, float)
     action[random.randint(0,3)] = 1
