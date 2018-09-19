@@ -29,6 +29,11 @@ INITIAL_EPSILON = 0.5 # starting value of epsilon
 FINAL_EPSILON = 0.01 # final value of epsilon
 REPLAY_SIZE = 10000 # experience replay buffer size
 BATCH_SIZE = 32 # size of minibatch
+MEMORY_CAPACITY = 10000
+BATCH_SIZE = 32
+TAU = 0.01      # soft replacement
+
+##############################     DQN class begin     ##################################
 
 
 class DQN():
@@ -38,45 +43,68 @@ class DQN():
     self.epsilon = INITIAL_EPSILON
     self.state_dim = 12
     self.action_dim = 10
-    
-    self.create_Q_network()
-    self.create_training_method()
-
-    self.session = tf.InteractiveSession()
-    self.session.run(tf.initialize_all_variables())
+    self.memory = np.zeros((MEMORY_CAPACITY, self.state_dim * 2 + self.action_dim + 1), dtype=np.float32)
 
 
+    self.session = tf.Session()
 
-  def create_Q_network(self):
-    W1 = self.weight_variable([self.state_dim, 20])
-    b1 = self.bias_variable([20])
-    W2 = self.weight_variable([20,self.action_dim])
-    b2 = self.bias_variable([self.action_dim])
+    self.state = tf.placeholder(tf.float32, [None, self.state_dim], 'state')
+    self.state_next = tf.placeholder(tf.float32, [None, self.state_dim], 'state_next')
+    self.R = tf.placeholder(tf.float32, [None, 1], 'r')
 
-    self.state_input = tf.placeholder("float32", [None, self.state_dim])
+    with tf.variable_scope('Actor'):
+      self.action = self._build_a(self.state, scope='eval', trainable=True)
+      action_next = self._build_a(self.state_next, scope='target', trainable=False)
+    with tf.variable_scope('Critic'):
+      q = self._build_c(self.state, self.action, scope='eval', trainable=True)
+      q_next = self._build_c(self.state_next, action_next, scope='target', trainable=False)
 
-    h_layer = tf.nn.relu(tf.matmul(self.state_input, W1) + b1)
+    self.ae_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='Actor/eval')
+    self.at_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='Actor/target')
+    self.ce_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='Critic/eval')
+    self.ct_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='Critic/target')
 
-    self.Q_value = tf.matmul(h_layer, W2) + b2
+    self.soft_replace = [[tf.assign(ta, (1 - TAU) * ta + TAU * ea), tf.assign(tc, (1 - TAU) * tc + TAU * ec)]
+                             for ta, ea, tc, ec in zip(self.at_params, self.ae_params, self.ct_params, self.ce_params)]
+
+    q_target = self.R + GAMMA * q_next
+
+    # in the feed_dic for the td_error, the self.a should change to actions in memory
+
+
+    td_error = tf.losses.mean_squared_error(labels=q_target, predictions=q)
+
+
+  # def create_Q_network(self):
+  #   W1 = self.weight_variable([self.state_dim, 20])
+  #   b1 = self.bias_variable([20])
+  #   W2 = self.weight_variable([20,self.action_dim])
+  #   b2 = self.bias_variable([self.action_dim])
+
+  #   self.state_input = tf.placeholder("float32", [None, self.state_dim])
+
+  #   h_layer = tf.nn.relu(tf.matmul(self.state_input, W1) + b1)
+
+  #   self.Q_value = tf.matmul(h_layer, W2) + b2
   
-  def weight_variable(self, shape):
-    initial = tf.truncated_normal(shape)
-    return tf.Variable(initial)
+  # def weight_variable(self, shape):
+  #   initial = tf.truncated_normal(shape)
+  #   return tf.Variable(initial)
 
-  def bias_variable(self, shape):
-    initial = tf.constant(0.01, shape = shape)
-    return tf.Variable(initial)
+  # def bias_variable(self, shape):
+  #   initial = tf.constant(0.01, shape = shape)
+  #   return tf.Variable(initial)
 
-  def create_training_method(self):
-    pass
+  # def create_training_method(self):
+  #   pass
 
 
-  def perceive(self,state, action, reward, next_state, done):
-    one_hot_action = np.zeros(self.action_dim)
-    one_hot_action[action] = 1
+  # def perceive(self,state, action, reward, next_state, done):
+  #   one_hot_action = np.zeros(self.action_dim)
+  #   one_hot_action[action] = 1
 
-  def train_Q_network(self):
-    pass
+  # def train_Q_network(self):
+  #   pass
 
   def egreedy_action(self, state):
     action = np.zeros(10, float)
@@ -89,9 +117,12 @@ class DQN():
     action[9] = random.uniform(-180, 180)#KICK DEGREES
     return action
 
-  def action(self, state):
-    pass
+  
 
+##############################     DQN class done     ##################################
+
+
+##############################     global functions begin     ##################################
 
 def getReward(s):
   reward=0
@@ -134,6 +165,13 @@ def getReward2(last_state, state, status, has_kicked):
   reward = reward + 3 * distance([last_state[3], last_state[4]], [1,0])
   reward = reward - 3 * distance([state[3], state[4]], [1,0])#[1,0] is the goal position
   return reward
+
+
+
+##############################     global functions done     ##################################
+
+##############################     main function begin     ##################################
+
 def main():
   hfo_env = hfo.HFOEnvironment()
   hfo_env.connectToServer(hfo.HIGH_LEVEL_FEATURE_SET)
@@ -178,6 +216,7 @@ def main():
     if status == hfo.SERVER_DOWN:
       hfo_env.act(hfo.QUIT)
       exit()
+##############################     main function done     ##################################
 
 
           
