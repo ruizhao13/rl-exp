@@ -41,12 +41,13 @@ class DQN():
     self.replay_buffer = deque()
     self.time_step = 0
     self.epsilon = INITIAL_EPSILON
+    self.pointer = 0 #used for updating the memory
     self.state_dim = 12
     self.action_dim = 10
     self.memory = np.zeros((MEMORY_CAPACITY, self.state_dim * 2 + self.action_dim + 1), dtype=np.float32)
 
 
-    self.session = tf.Session()
+    self.sess = tf.Session()
 
     self.state = tf.placeholder(tf.float32, [None, self.state_dim], 'state')
     self.state_next = tf.placeholder(tf.float32, [None, self.state_dim], 'state_next')
@@ -80,17 +81,24 @@ class DQN():
   def choose_action(self, state):
     return self.sess.run(self.action, {self.state: state[np.newaxis, :]})[0]
 
+  def store_transition(self, state, action, reward, state_next):
+    transition = np.hstack((state, action, [reward], state_next))
+    index = self.pointer % MEMORY_CAPACITY
+    self.memory[index, :] = transition
+    self.pointer += 1
+
+    ####not done
 
 
 
   def _build_a(self, state, scope, trainable):
     with tf.variable_scope(scope):
       net = tf.layers.dense(state, 30, activation=tf.nnrelu, name='l1')
-
+      # not done
 
   def _build_c(self, state, action, scope, trainable):
     with tf.variable_scope(scope):
-      n_l1 = 
+      pass # not done
   
   def egreedy_action(self, state):
     action = np.zeros(10, float)
