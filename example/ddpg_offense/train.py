@@ -12,7 +12,6 @@ import sys, os
 # from train.actor import Actor
 # from train.critic import Critic
 
-from tensorflow.contrib.layers import batch_norm
 
 try:
   import hfo
@@ -30,7 +29,6 @@ FINAL_EPSILON = 0.01 # final value of epsilon
 REPLAY_SIZE = 10000 # experience replay buffer size
 BATCH_SIZE = 32 # size of minibatch
 MEMORY_CAPACITY = 10000
-BATCH_SIZE = 32
 TAU = 0.01      # soft replacement
 
 ##############################     DQN class begin     ##################################
@@ -52,14 +50,14 @@ class DQN():
     self.state = tf.placeholder(tf.float32, [None, self.state_dim], 'state')
     self.state_next = tf.placeholder(tf.float32, [None, self.state_dim], 'state_next')
     self.R = tf.placeholder(tf.float32, [None, 1], 'r')
-
+    '''
     with tf.variable_scope('Actor'):
       self.action = self._build_a(self.state, scope='eval', trainable=True)
       action_next = self._build_a(self.state_next, scope='target', trainable=False)
     with tf.variable_scope('Critic'):
       q = self._build_c(self.state, self.action, scope='eval', trainable=True)
       q_next = self._build_c(self.state_next, action_next, scope='target', trainable=False)
-
+    '''
     self.ae_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='Actor/eval')
     self.at_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='Actor/target')
     self.ce_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='Critic/eval')
@@ -81,6 +79,36 @@ class DQN():
   def choose_action(self, state):
     return self.sess.run(self.action, {self.state: state[np.newaxis, :]})[0]
 
+  def learn(self):
+    self.sess.run(self.soft_replace)
+
+    indices = np.random.choice(MEMORY_CAPACITY, size=BATCH_SIZE)
+    bt = self.memory[indices, :]
+    bs = bt[:, :self.state_dim]
+    ba = bt[:, self.state_dim: self.state_dim + self.action_dim]
+    br = bt[:, -self.state_dim - 1: -self.state_dim]
+    bs_ = bt[:, -self.state_dim]
+
+    self.sess.run(self.atrain)
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
   def store_transition(self, state, action, reward, state_next):
     transition = np.hstack((state, action, [reward], state_next))
     index = self.pointer % MEMORY_CAPACITY
@@ -93,7 +121,7 @@ class DQN():
 
   def _build_a(self, state, scope, trainable):
     with tf.variable_scope(scope):
-      net = tf.layers.dense(state, 30, activation=tf.nnrelu, name='l1')
+      net = tf.layers.dense(state, 30, activation=tf.nn.relu, name='l1')
       # not done
 
   def _build_c(self, state, action, scope, trainable):
