@@ -215,6 +215,8 @@ def main():
         print(reward)
         agent.store_transition(state=last_state, action=action, reward=reward, state_next=state)
         # print(count, action)
+        if agent.pointer > MEMORY_CAPACITY:
+          agent.learn()
       if np.random.uniform() < EPSILON:
         action = agent.choose_action(state)
       else:
