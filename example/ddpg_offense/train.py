@@ -97,9 +97,15 @@ class DQN():
     bs = bt[:, :self.state_dim]
     ba = bt[:, self.state_dim: self.state_dim + self.action_dim]
     br = bt[:, -self.state_dim - 1: -self.state_dim]
-    bs_ = bt[:, -self.state_dim]
+    bs_ = bt[:, -self.state_dim :]
+    # print(bt)
+    # print(bs)
+    # print(ba)
+    # print(br)
+    # print(bs_)
 
-    self.sess.run(self.atrain)
+    self.sess.run(self.atrain, {self.state: bs})
+    self.sess.run(self.ctrain, {self.state: bs, self.action: ba, self.R: br, self.state_next: bs_})
   
   
   def store_transition(self, state, action, reward, state_next):
@@ -111,19 +117,27 @@ class DQN():
 
   def _build_a(self, state, scope, trainable):
     with tf.variable_scope(scope):
-      net = tf.layers.dense(state, 30, activation=tf.nn.relu, name='l1', kernel_initializer=tf.random_normal_initializer(),trainable=trainable)
-      a = tf.layers.dense(net, 10, activation=tf.nn.tanh, name='action', kernel_initializer=tf.random_normal_initializer(), trainable=trainable)
+      net = tf.layers.dense(state, 1024, activation=tf.nn.relu, name='l1', kernel_initializer=tf.random_normal_initializer(),trainable=trainable)
+      net2 = tf.layers.dense(net, 512, activation=tf.nn.relu, name='l2', kernel_initializer=tf.random_normal_initializer(), trainable=trainable)
+      net3 = tf.layers.dense(net, 256, activation=tf.nn.relu, name='l3', kernel_initializer=tf.random_normal_initializer(), trainable=trainable)
+      net4 = tf.layers.dense(net, 128, activation=tf.nn.relu, name='l4', kernel_initializer=tf.random_normal_initializer(), trainable=trainable)
+      a = tf.layers.dense(net4, self.action_dim, activation=tf.nn.tanh, name='action', kernel_initializer=tf.random_normal_initializer(), trainable=trainable)
       return tf.multiply(a, self.a_bound, name='scaled_a') + self.a_min
       # not done
 
   def _build_c(self, state, action, scope, trainable):
     with tf.variable_scope(scope):
-      n_l1 = 30
-      w1_s = tf.get_variable('w1_s', [self.state_dim, n_l1], trainable=trainable)
-      w1_a = tf.get_variable('w1_a', [self.action_dim, n_l1], trainable=trainable)
-      b1 = tf.get_variable('b1', [1, n_l1], trainable=trainable)
-      net = tf.nn.relu(tf.matmul(state, w1_s) + tf.matmul(action, w1_a) + b1)
-      return tf.layers.dense(net, 1, trainable=trainable)
+      c_input = tf.concat([state, action], 1)
+      net = tf.layers.dense(c_input, 1024, activation=tf.nn.relu, name='l1', kernel_initializer=tf.random_normal_initializer(),trainable=trainable)
+      net2 = tf.layers.dense(net, 512, activation=tf.nn.relu, name='l2', kernel_initializer=tf.random_normal_initializer(), trainable=trainable)
+      net3 = tf.layers.dense(net, 256, activation=tf.nn.relu, name='l3', kernel_initializer=tf.random_normal_initializer(), trainable=trainable)
+      net4 = tf.layers.dense(net, 128, activation=tf.nn.relu, name='l4', kernel_initializer=tf.random_normal_initializer(), trainable=trainable)
+      # n_l1 = 30
+      # w1_s = tf.get_variable('w1_s', [self.state_dim, n_l1], trainable=trainable)
+      # w1_a = tf.get_variable('w1_a', [self.action_dim, n_l1], trainable=trainable)
+      # b1 = tf.get_variable('b1', [1, n_l1], trainable=trainable)
+      # net = tf.nn.relu(tf.matmul(state, w1_s) + tf.matmul(action, w1_a) + b1)
+      return tf.layers.dense(net4, 1, trainable=trainable)
   
   def egreedy_action(self):
     action = np.zeros(10, float)
@@ -200,18 +214,18 @@ def main():
     count = 0
     action = np.zeros(10, dtype=float)
     has_kicked = False
-    print("episode begin")
+    # print("episode begin")
     
     while status == hfo.IN_GAME:
       count = count + 1
-      print("count" + str(count))
+      # print("count" + str(count))
       state = hfo_env.getState()
       
       if int(state[5]) == 1:
         has_kicked = True
       if bool(action[0]) or bool(action[1]) or bool(action[2]) or bool(action[3]) == True:
         reward = getReward2(last_state, state, status, has_kicked)
-        print("reward") 
+        # print("reward") 
         print(reward)
         agent.store_transition(state=last_state, action=action, reward=reward, state_next=state)
         # print(count, action)
@@ -223,32 +237,32 @@ def main():
         action = agent.egreedy_action()
       maximum = np.max(action[:4])
       a_c = np.where(action[:4] == maximum)
-      print(a_c)
+      # print(a_c)
       a_c = a_c[0][0]
-      print(a_c)
+      # print(a_c)
       # print(action)
       if a_c == 3 and int(state[5]) == 1:
         hfo_env.act(hfo.KICK, action[8], action[9])
-        print("kick")
+        # print("kick")
         
       elif a_c == 1:
         hfo_env.act(hfo.TURN, action[6])
-        print("turn")
+        # print("turn")
       elif a_c == 2:
-        hfo_env.act(hfo.TACKLE, action[7])
-        print("tackle")
+        hfo_env.act(hfo.DASH, action[4], action[5])
+        # print("tackle")
       else:
         # hfo_env.act(hfo.KICK, action[8], action[9])
         hfo_env.act(hfo.DASH, action[4], action[5])
-        print("DASH ")
+        # print("DASH ")
       status=hfo_env.step()
       last_state = state
-    agent.saver.save(agent.sess, 'ckpt/mnist.ckpt', global_step=episode)  
     
     # Quit if the server goes down
     if status == hfo.SERVER_DOWN:
       hfo_env.act(hfo.QUIT)
       exit()
+  agent.saver.save(agent.sess, 'ckpt/mnist.ckpt', global_step=1)  
   
 ##############################     main function done     ##################################
 
