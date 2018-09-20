@@ -48,7 +48,6 @@ class DQN():
     self.a_min = [0, 0, 0, 0, 0, 0, 0, 0, 50, 0]
     self.memory = np.zeros((MEMORY_CAPACITY, self.state_dim * 2 + self.action_dim + 1), dtype=np.float32)
 
-
     self.sess = tf.Session()
 
     self.state = tf.placeholder(tf.float32, [None, self.state_dim], 'state')
@@ -82,6 +81,8 @@ class DQN():
     a_loss = -tf.reduce_mean(q)
     self.atrain = tf.train.AdamOptimizer(LR_A).minimize(a_loss, var_list=self.ae_params)
     self.sess.run(tf.global_variables_initializer())
+    self.saver = tf.train.Saver(max_to_keep=0)
+
 
  
 
@@ -240,12 +241,13 @@ def main():
         print("DASH ")
       status=hfo_env.step()
       last_state = state
-      
+    agent.saver.save(agent.sess, 'ckpt/mnist.ckpt', global_step=episode)  
     
     # Quit if the server goes down
     if status == hfo.SERVER_DOWN:
       hfo_env.act(hfo.QUIT)
       exit()
+  
 ##############################     main function done     ##################################
 
 
