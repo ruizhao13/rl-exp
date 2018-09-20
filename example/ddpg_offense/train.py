@@ -22,10 +22,12 @@ except ImportError:
 # def build_ddpg_graph(actor, critic):
 #     actor = Actor()
 #     critic = Critic()
-
+LR_A = 0.001    # learning rate for actor
+LR_C = 0.001    # learning rate for critic
 GAMMA = 0.9 # discount factor for target Q
 INITIAL_EPSILON = 0.5 # starting value of epsilon
 FINAL_EPSILON = 0.01 # final value of epsilon
+EPSILON = 0.9
 REPLAY_SIZE = 10000 # experience replay buffer size
 BATCH_SIZE = 32 # size of minibatch
 MEMORY_CAPACITY = 10000
@@ -42,6 +44,8 @@ class DQN():
     self.pointer = 0 #used for updating the memory
     self.state_dim = 12
     self.action_dim = 10
+    self.a_bound = [1,1,1,1,100, 180, 180, 180, 50, 180]
+    self.a_min = [0, 0, 0, 0, 0, 0, 0, 0, 50, 0]
     self.memory = np.zeros((MEMORY_CAPACITY, self.state_dim * 2 + self.action_dim + 1), dtype=np.float32)
 
 
@@ -50,14 +54,14 @@ class DQN():
     self.state = tf.placeholder(tf.float32, [None, self.state_dim], 'state')
     self.state_next = tf.placeholder(tf.float32, [None, self.state_dim], 'state_next')
     self.R = tf.placeholder(tf.float32, [None, 1], 'r')
-    '''
+    
     with tf.variable_scope('Actor'):
       self.action = self._build_a(self.state, scope='eval', trainable=True)
       action_next = self._build_a(self.state_next, scope='target', trainable=False)
     with tf.variable_scope('Critic'):
       q = self._build_c(self.state, self.action, scope='eval', trainable=True)
       q_next = self._build_c(self.state_next, action_next, scope='target', trainable=False)
-    '''
+    
     self.ae_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='Actor/eval')
     self.at_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='Actor/target')
     self.ce_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='Critic/eval')
@@ -72,7 +76,12 @@ class DQN():
 
 
     td_error = tf.losses.mean_squared_error(labels=q_target, predictions=q)
-  
+    
+    self.ctrain = tf.train.AdamOptimizer(LR_C).minimize(td_error, var_list=self.ce_params)
+
+    a_loss = -tf.reduce_mean(q)
+    self.atrain = tf.train.AdamOptimizer(LR_A).minimize(a_loss, var_list=self.ae_params)
+    self.sess.run(tf.global_variables_initializer())
 
  
 
@@ -92,43 +101,30 @@ class DQN():
     self.sess.run(self.atrain)
   
   
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
   def store_transition(self, state, action, reward, state_next):
     transition = np.hstack((state, action, [reward], state_next))
     index = self.pointer % MEMORY_CAPACITY
     self.memory[index, :] = transition
     self.pointer += 1
 
-    ####not done
-
-
 
   def _build_a(self, state, scope, trainable):
     with tf.variable_scope(scope):
-      net = tf.layers.dense(state, 30, activation=tf.nn.relu, name='l1')
+      net = tf.layers.dense(state, 30, activation=tf.nn.relu, name='l1', kernel_initializer=tf.random_normal_initializer(),trainable=trainable)
+      a = tf.layers.dense(net, 10, activation=tf.nn.tanh, name='action', kernel_initializer=tf.random_normal_initializer(), trainable=trainable)
+      return tf.multiply(a, self.a_bound, name='scaled_a') + self.a_min
       # not done
 
   def _build_c(self, state, action, scope, trainable):
     with tf.variable_scope(scope):
-      pass # not done
+      n_l1 = 30
+      w1_s = tf.get_variable('w1_s', [self.state_dim, n_l1], trainable=trainable)
+      w1_a = tf.get_variable('w1_a', [self.action_dim, n_l1], trainable=trainable)
+      b1 = tf.get_variable('b1', [1, n_l1], trainable=trainable)
+      net = tf.nn.relu(tf.matmul(state, w1_s) + tf.matmul(action, w1_a) + b1)
+      return tf.layers.dense(net, 1, trainable=trainable)
   
-  def egreedy_action(self, state):
+  def egreedy_action(self):
     action = np.zeros(10, float)
     action[random.randint(0,3)] = 1
     action[4] = random.uniform(-100, 100)#DASH POWER
@@ -198,38 +194,50 @@ def main():
   hfo_env = hfo.HFOEnvironment()
   hfo_env.connectToServer(hfo.HIGH_LEVEL_FEATURE_SET)
   agent = DQN()
-  for episode in range(5):  # replace with xrange(5) for Python 2.X
+  for episode in range(50000000):  # replace with xrange(5) for Python 2.X
     status = hfo.IN_GAME
     count = 0
     action = np.zeros(10, dtype=float)
     has_kicked = False
     print("episode begin")
+    
     while status == hfo.IN_GAME:
       count = count + 1
       print("count" + str(count))
       state = hfo_env.getState()
+      
       if int(state[5]) == 1:
         has_kicked = True
       if bool(action[0]) or bool(action[1]) or bool(action[2]) or bool(action[3]) == True:
         reward = getReward2(last_state, state, status, has_kicked)
-        print("reward")
+        print("reward") 
         print(reward)
+        agent.store_transition(state=last_state, action=action, reward=reward, state_next=state)
         # print(count, action)
-      action = agent.egreedy_action(state)
+      if np.random.uniform() < EPSILON:
+        action = agent.choose_action(state)
+      else:
+        action = agent.egreedy_action()
+      maximum = np.max(action[:4])
+      a_c = np.where(action[:4] == maximum)
+      print(a_c)
+      a_c = a_c[0][0]
+      print(a_c)
       # print(action)
-      if int(action[0]) == 1:
-        hfo_env.act(hfo.DASH, action[4], action[5])
-        print("DASH ")
-      elif int(action[1]) == 1:
+      if a_c == 3 and int(state[5]) == 1:
+        hfo_env.act(hfo.KICK, action[8], action[9])
+        print("kick")
+        
+      elif a_c == 1:
         hfo_env.act(hfo.TURN, action[6])
         print("turn")
-      elif int(action[2]) == 1:
+      elif a_c == 2:
         hfo_env.act(hfo.TACKLE, action[7])
         print("tackle")
-      elif int(action[3]) == 1:
+      else:
         # hfo_env.act(hfo.KICK, action[8], action[9])
-        hfo_env.act(hfo.SHOOT)
-        print("kick")
+        hfo_env.act(hfo.DASH, action[4], action[5])
+        print("DASH ")
       status=hfo_env.step()
       last_state = state
       
