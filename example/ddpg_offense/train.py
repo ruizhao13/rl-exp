@@ -22,8 +22,8 @@ except ImportError:
 # def build_ddpg_graph(actor, critic):
 #     actor = Actor()
 #     critic = Critic()
-LR_A = 0.001    # learning rate for actor
-LR_C = 0.001    # learning rate for critic
+LR_A = 0.01    # learning rate for actor
+LR_C = 0.01    # learning rate for critic
 GAMMA = 0.9 # discount factor for target Q
 INITIAL_EPSILON = 0.5 # starting value of epsilon
 FINAL_EPSILON = 0.01 # final value of epsilon
@@ -40,7 +40,7 @@ class DQN():
   def __init__(self):
     self.replay_buffer = deque()
     self.time_step = 0
-    self.epsilon = INITIAL_EPSILON
+    self.epsilon = EPSILON
     self.pointer = 0 #used for updating the memory
     self.state_dim = 12
     self.action_dim = 10
@@ -81,7 +81,7 @@ class DQN():
     a_loss = -tf.reduce_mean(q)
     self.atrain = tf.train.AdamOptimizer(LR_A).minimize(a_loss, var_list=self.ae_params)
     self.sess.run(tf.global_variables_initializer())
-    self.saver = tf.train.Saver(max_to_keep=0)
+    self.saver = tf.train.Saver(keep_checkpoint_every_n_hours=0.5,max_to_keep=0)
 
 
  
@@ -190,6 +190,13 @@ def distance(a, b):
   return math.hypot(c[0], c[1])
 def getReward2(last_state, state, status, has_kicked):
   reward = 0
+  state[9] = 0
+  if min(state) == -2 or state[0] == -1 or state[1] == -1 or state[0] ==1 or state[1] == 1:
+    # print(state)
+    state[9] = -2
+    return -10000
+  # print("flag")
+  # print(state)
   if status == hfo.GOAL:
     reward = reward + 5
   if int(state[5]) == 1 and has_kicked == False:
@@ -197,6 +204,7 @@ def getReward2(last_state, state, status, has_kicked):
   reward = reward + distance([last_state[0], last_state[1]], [last_state[3], last_state[4]]) - distance([state[0], state[1]], [state[3], state[4]])
   reward = reward + 3 * distance([last_state[3], last_state[4]], [1,0])
   reward = reward - 3 * distance([state[3], state[4]], [1,0])#[1,0] is the goal position
+  state[9]=-2
   return reward
 
 
@@ -209,7 +217,9 @@ def main():
   hfo_env = hfo.HFOEnvironment()
   hfo_env.connectToServer(hfo.HIGH_LEVEL_FEATURE_SET)
   agent = DQN()
-  for episode in range(50000000):  # replace with xrange(5) for Python 2.X
+  model_file=tf.train.latest_checkpoint('ckpt/')
+  agent.saver.restore(agent.sess,model_file)
+  for episode in range(10000):  # replace with xrange(5) for Python 2.X
     status = hfo.IN_GAME
     count = 0
     action = np.zeros(10, dtype=float)
@@ -227,6 +237,10 @@ def main():
         reward = getReward2(last_state, state, status, has_kicked)
         # print("reward") 
         print(reward)
+        if reward > 0:
+          print('      +')
+        else:
+          print('               -')
         agent.store_transition(state=last_state, action=action, reward=reward, state_next=state)
         # print(count, action)
         if agent.pointer > MEMORY_CAPACITY:
@@ -243,18 +257,18 @@ def main():
       # print(action)
       if a_c == 3 and int(state[5]) == 1:
         hfo_env.act(hfo.KICK, action[8], action[9])
-        # print("kick")
+        print("kick")
         
       elif a_c == 1:
         hfo_env.act(hfo.TURN, action[6])
-        # print("turn")
+        print("turn")
       elif a_c == 2:
         hfo_env.act(hfo.DASH, action[4], action[5])
-        # print("tackle")
+        print("DASH")
       else:
         # hfo_env.act(hfo.KICK, action[8], action[9])
         hfo_env.act(hfo.DASH, action[4], action[5])
-        # print("DASH ")
+        print("DASH ")
       status=hfo_env.step()
       last_state = state
     
@@ -262,7 +276,9 @@ def main():
     if status == hfo.SERVER_DOWN:
       hfo_env.act(hfo.QUIT)
       exit()
-  agent.saver.save(agent.sess, 'ckpt/mnist.ckpt', global_step=1)  
+    if episode % 100 == 0:
+      agent.saver.save(agent.sess, 'ckpt/mnist.ckpt', global_step=episode)  
+    
   
 ##############################     main function done     ##################################
 
