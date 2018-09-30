@@ -7,6 +7,7 @@ import random
 from collections import deque
 import sys, os
 
+from tensorflow.contrib.layers import fully_connected,batch_norm
 
 
 # from train.actor import Actor
@@ -58,7 +59,7 @@ class DQN():
       self.action = self._build_a(self.state, scope='eval', trainable=True)
       action_next = self._build_a(self.state_next, scope='target', trainable=False)
     with tf.variable_scope('Critic'):
-      q = self._build_c(self.state, self.action, scope='eval', trainable=True)
+      self.q = self._build_c(self.state, self.action, scope='eval', trainable=True)
       q_next = self._build_c(self.state_next, action_next, scope='target', trainable=False)
     
     self.ae_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='Actor/eval')
@@ -74,12 +75,18 @@ class DQN():
     # in the feed_dic for the td_error, the self.a should change to actions in memory
 
 
-    td_error = tf.losses.mean_squared_error(labels=q_target, predictions=q)
+    td_error = tf.losses.mean_squared_error(labels=q_target, predictions=self.q)
     
     self.ctrain = tf.train.AdamOptimizer(LR_C).minimize(td_error, var_list=self.ce_params)
 
-    a_loss = -tf.reduce_mean(q)
-    self.atrain = tf.train.AdamOptimizer(LR_A).minimize(a_loss, var_list=self.ae_params)
+    a_loss = -tf.reduce_mean(self.q)
+    
+    
+    self.atrain = tf.train.GradientDescentOptimizer(LR_A).minimize(a_loss, var_list=self.ae_params)
+    
+    
+    
+    
     self.sess.run(tf.global_variables_initializer())
     self.saver = tf.train.Saver(keep_checkpoint_every_n_hours=0.5,max_to_keep=0)
 
@@ -98,13 +105,18 @@ class DQN():
     ba = bt[:, self.state_dim: self.state_dim + self.action_dim]
     br = bt[:, -self.state_dim - 1: -self.state_dim]
     bs_ = bt[:, -self.state_dim :]
-    # print(bt)
-    # print(bs)
-    # print(ba)
-    # print(br)
-    # print(bs_)
 
+    
+    
     self.sess.run(self.atrain, {self.state: bs})
+    
+    # optimizer = tf.train.AdamOptimizer(LR_C)
+    # drads = optimizer.compute_gradients(loss=-self.q, var_list=self.action)
+    # self.sess.run(drads, {self.state: bs})
+    # grads_and_vars = tf.gradients(self.q, self.action)
+    # print(self.sess.run(grads_and_vars))
+    
+    
     self.sess.run(self.ctrain, {self.state: bs, self.action: ba, self.R: br, self.state_next: bs_})
   
   
@@ -119,8 +131,8 @@ class DQN():
     with tf.variable_scope(scope):
       net = tf.layers.dense(state, 1024, activation=tf.nn.relu, name='l1', kernel_initializer=tf.random_normal_initializer(),trainable=trainable)
       net2 = tf.layers.dense(net, 512, activation=tf.nn.relu, name='l2', kernel_initializer=tf.random_normal_initializer(), trainable=trainable)
-      net3 = tf.layers.dense(net, 256, activation=tf.nn.relu, name='l3', kernel_initializer=tf.random_normal_initializer(), trainable=trainable)
-      net4 = tf.layers.dense(net, 128, activation=tf.nn.relu, name='l4', kernel_initializer=tf.random_normal_initializer(), trainable=trainable)
+      net3 = tf.layers.dense(net2, 256, activation=tf.nn.relu, name='l3', kernel_initializer=tf.random_normal_initializer(), trainable=trainable)
+      net4 = tf.layers.dense(net3, 128, activation=tf.nn.relu, name='l4', kernel_initializer=tf.random_normal_initializer(), trainable=trainable)
       a = tf.layers.dense(net4, self.action_dim, activation=tf.nn.tanh, name='action', kernel_initializer=tf.random_normal_initializer(), trainable=trainable)
       return tf.multiply(a, self.a_bound, name='scaled_a') + self.a_min
       # not done
@@ -130,8 +142,8 @@ class DQN():
       c_input = tf.concat([state, action], 1)
       net = tf.layers.dense(c_input, 1024, activation=tf.nn.relu, name='l1', kernel_initializer=tf.random_normal_initializer(),trainable=trainable)
       net2 = tf.layers.dense(net, 512, activation=tf.nn.relu, name='l2', kernel_initializer=tf.random_normal_initializer(), trainable=trainable)
-      net3 = tf.layers.dense(net, 256, activation=tf.nn.relu, name='l3', kernel_initializer=tf.random_normal_initializer(), trainable=trainable)
-      net4 = tf.layers.dense(net, 128, activation=tf.nn.relu, name='l4', kernel_initializer=tf.random_normal_initializer(), trainable=trainable)
+      net3 = tf.layers.dense(net2, 256, activation=tf.nn.relu, name='l3', kernel_initializer=tf.random_normal_initializer(), trainable=trainable)
+      net4 = tf.layers.dense(net3, 128, activation=tf.nn.relu, name='l4', kernel_initializer=tf.random_normal_initializer(), trainable=trainable)
       # n_l1 = 30
       # w1_s = tf.get_variable('w1_s', [self.state_dim, n_l1], trainable=trainable)
       # w1_a = tf.get_variable('w1_a', [self.action_dim, n_l1], trainable=trainable)
@@ -219,7 +231,7 @@ def main():
   agent = DQN()
   model_file=tf.train.latest_checkpoint('ckpt/')
   agent.saver.restore(agent.sess,model_file)
-  for episode in range(10000):  # replace with xrange(5) for Python 2.X
+  for episode in range(1000000):  # replace with xrange(5) for Python 2.X
     status = hfo.IN_GAME
     count = 0
     action = np.zeros(10, dtype=float)
@@ -236,11 +248,11 @@ def main():
       if bool(action[0]) or bool(action[1]) or bool(action[2]) or bool(action[3]) == True:
         reward = getReward2(last_state, state, status, has_kicked)
         # print("reward") 
-        print(reward)
-        if reward > 0:
-          print('      +')
-        else:
-          print('               -')
+        # print(reward)
+        # if reward > 0:
+        #   # print('      +')
+        # else:
+        #   # print('               -')
         agent.store_transition(state=last_state, action=action, reward=reward, state_next=state)
         # print(count, action)
         if agent.pointer > MEMORY_CAPACITY:
@@ -257,18 +269,18 @@ def main():
       # print(action)
       if a_c == 3 and int(state[5]) == 1:
         hfo_env.act(hfo.KICK, action[8], action[9])
-        print("kick")
+        # print("kick")
         
       elif a_c == 1:
         hfo_env.act(hfo.TURN, action[6])
-        print("turn")
+        # print("turn")
       elif a_c == 2:
         hfo_env.act(hfo.DASH, action[4], action[5])
-        print("DASH")
+        # print("DASH")
       else:
         # hfo_env.act(hfo.KICK, action[8], action[9])
         hfo_env.act(hfo.DASH, action[4], action[5])
-        print("DASH ")
+        # print("DASH ")
       status=hfo_env.step()
       last_state = state
     
