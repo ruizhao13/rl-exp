@@ -109,7 +109,7 @@ class DQN():
     
     
     self.sess.run(self.atrain, {self.state: bs})
-    self.action_gradients = tf.gradients(self.q, self.action)
+    
     # optimizer = tf.train.AdamOptimizer(LR_C)
     # drads = optimizer.compute_gradients(loss=-self.q, var_list=self.action)
     # self.sess.run(drads, {self.state: bs})
@@ -149,9 +149,8 @@ class DQN():
       # w1_a = tf.get_variable('w1_a', [self.action_dim, n_l1], trainable=trainable)
       # b1 = tf.get_variable('b1', [1, n_l1], trainable=trainable)
       # net = tf.nn.relu(tf.matmul(state, w1_s) + tf.matmul(action, w1_a) + b1)
-      q_value_output = tf.layers.dense(net4, 1, trainable=trainable)
-      return q_value_output
-
+      return tf.layers.dense(net4, 1, trainable=trainable)
+  
   def egreedy_action(self):
     action = np.zeros(10, float)
     action[random.randint(0,3)] = 1
